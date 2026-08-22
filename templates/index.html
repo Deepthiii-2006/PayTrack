@@ -1,0 +1,342 @@
+<!DOCTYPE html>
+<html lang="en">
+    
+<head>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+    <title>PayTrack - Rent & Payment Tracker</title>
+    
+</head>
+
+<body>
+
+    <aside class="sidebar">
+        <h2>💰 PayTrack</h2>
+
+        <nav>
+            <button onclick="showPage('dashboard')">🏠 Dashboard</button>
+            <button onclick="showPage('rent')">🏡 Rent</button>
+            <button onclick="showPage('payments')">💳 Payments</button>
+            <button onclick="showPage('reminders')">🔔 Reminders</button>
+        </nav>
+    </aside>
+
+
+    <main>
+
+        <header>
+            <div>
+                <h1>Payment Tracker</h1>
+                <p>Keep track of rent and payments easily.</p>
+            </div>
+
+            <div class="today" id="today"></div>
+        </header>
+
+
+        <!-- DASHBOARD -->
+
+        <section id="dashboard" class="page">
+
+            <h2>Overview</h2>
+
+            <div class="cards">
+
+                <div class="card">
+                    <span>💰 Total Rent</span>
+                    <h2 id="totalRent">₹0</h2>
+                </div>
+
+                <div class="card green">
+                    <span>✅ Total Received</span>
+                    <h2 id="totalPaid">₹0</h2>
+                </div>
+
+                <div class="card red">
+                    <span>⏳ Total Pending</span>
+                    <h2 id="totalPending">₹0</h2>
+                </div>
+
+                <div class="card yellow">
+                    <span>👥 Active Records</span>
+                    <h2 id="totalRecords">0</h2>
+                </div>
+                    <div class="card red">
+                         <span>🔴 Overdue Payments</span>
+                         <h2 id="totalOverdue">0</h2>
+                </div>
+
+<div class="card">
+    <span>🔵 Upcoming Payments</span>
+    <h2 id="totalUpcoming">0</h2>
+</div>
+
+            </div>
+
+
+            <div class="panel">
+
+                <div class="panel-header">
+                    <h2>Rent Status</h2>
+
+                    <button class="primary" onclick="openRentForm()">
+                        + Add Rent
+                    </button>
+                </div>
+
+                <div id="rentList"></div>
+
+            </div>
+
+        </section>
+
+
+        <!-- RENT PAGE -->
+
+        <section id="rent" class="page hidden">
+
+            <div class="panel">
+
+                <div class="panel-header">
+                    <h2>Rent Records</h2>
+
+                    <button class="primary" onclick="openRentForm()">
+                        + Add Rent
+                    </button>
+                </div>
+
+                <div id="rentList2"></div>
+
+            </div>
+
+        </section>
+
+
+        <!-- PAYMENTS -->
+
+        <section id="payments" class="page hidden">
+
+            <div class="panel">
+
+                <h2>Payment History</h2>
+
+                <div id="paymentHistory"></div>
+
+            </div>
+
+        </section>
+
+
+        <!-- REMINDERS -->
+
+        <section id="reminders" class="page hidden">
+
+            <div class="panel">
+
+                <h2>🔔 Upcoming & Pending Payments</h2>
+
+                <div id="reminderList"></div>
+
+            </div>
+
+        </section>
+
+
+    </main>
+
+
+    <!-- ADD RENT MODAL -->
+
+    <div id="rentModal" class="modal">
+
+        <div class="modal-box">
+
+            <div class="modal-header">
+
+                <h2>Add Rent</h2>
+
+                <button onclick="closeRentForm()">✕</button>
+
+            </div>
+
+            <label>Person Name</label>
+            <input id="personName" type="text" placeholder="Example: Ravi">
+
+            <label>Type</label>
+
+            <select id="rentType">
+
+                <option value="House Rent">🏠 House Rent</option>
+                <option value="Vehicle Rent">🚗 Vehicle Rent</option>
+
+            </select>
+
+
+            <label>Monthly Rent</label>
+
+            <input
+                id="monthlyRent"
+                type="number"
+                placeholder="Example: 5000"
+            >
+
+
+            <label>Due Date</label>
+
+            <input
+                
+                id="dueDate"
+                type="date"
+                min="1"
+                max="31"
+                
+            >
+
+
+            <button class="primary full" onclick="addRent()">
+                Save Rent
+            </button>
+
+        </div>
+
+    </div>
+
+
+    <!-- PAYMENT MODAL -->
+
+    <div id="paymentModal" class="modal">
+
+        <div class="modal-box">
+
+            <div class="modal-header">
+
+                <h2>Record Payment</h2>
+
+                <button onclick="closePaymentForm()">✕</button>
+
+            </div>
+
+            <h3 id="paymentPerson"></h3>
+
+            <p>
+                Monthly Rent:
+                <strong id="paymentRent"></strong>
+            </p>
+
+            <p>
+                Already Paid:
+                <strong id="paymentAlreadyPaid"></strong>
+            </p>
+
+            <p>
+                Remaining:
+                <strong id="paymentRemaining"></strong>
+            </p>
+
+
+            <label>Amount Received</label>
+
+            <input
+                id="paymentAmount"
+                type="number"
+                placeholder="Example: 2000"
+            >
+
+
+            <label>Payment Method</label>
+
+            <select id="paymentMethod">
+
+                <option>💵 Cash</option>
+                <option>📱 UPI</option>
+                <option>🏦 Bank Transfer</option>
+
+            </select>
+
+
+            <label>Payment Date</label>
+
+            <input
+                id="paymentDate"
+                type="date"
+            >
+
+
+            <button class="primary full" onclick="recordPayment()">
+                Save Payment
+            </button>
+
+        </div>
+
+    </div>
+    <!-- EDIT RENT MODAL -->
+
+<div id="editModal" class="modal">
+
+    <div class="modal-box">
+
+        <div class="modal-header">
+
+            <h2>Edit Rent</h2>
+
+            <button onclick="closeEditForm()">✕</button>
+
+        </div>
+
+
+        <label>Person Name</label>
+
+        <input
+            id="editPersonName"
+            type="text"
+            placeholder="Example: Ravi"
+        >
+
+
+        <label>Type</label>
+
+        <select id="editRentType">
+
+            <option value="House Rent">🏠 House Rent</option>
+
+            <option value="Vehicle Rent">🚗 Vehicle Rent</option>
+
+        </select>
+
+
+        <label>Monthly Rent</label>
+
+        <input
+            id="editMonthlyRent"
+            type="number"
+            placeholder="Example: 5000"
+        >
+
+
+        <label>Due Date</label>
+
+        <input
+            id="editDueDate"
+            type="date"
+        >
+
+
+        <button
+            class="primary full"
+            onclick="saveEditedRent()">
+
+            Save Changes
+
+        </button>
+
+    </div>
+
+</div>
+
+
+    <script src="{{ url_for('static', filename='js/script.js') }}"></script>
+
+</body>
+</html>
