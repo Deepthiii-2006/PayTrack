@@ -489,15 +489,7 @@ async function markFullPaid(id) {
         rent.monthlyRent;
 
 
-    rent.payments.push({
-
-        amount: pending,
-
-        method: method,
-
-        date: getToday()
-
-    });
+    
 
 
     displayRents();
@@ -652,15 +644,7 @@ async function recordPayment() {
         selectedRent.paid =
             result.paid_amount;
 
-        selectedRent.payments.push({
-
-            amount: amount,
-
-            method: method,
-
-            date: date
-
-        });
+        
 
         closePaymentForm();
 

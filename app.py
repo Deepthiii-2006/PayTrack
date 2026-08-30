@@ -1,18 +1,203 @@
-from flask import Flask, render_template, request, jsonify
+from flask import Flask, render_template, request, jsonify, redirect
 from database import get_connection
+from flask_login import (
+    LoginManager,
+    UserMixin,
+    login_user,
+    logout_user,
+    login_required,
+    current_user,
+)
+from werkzeug.security import generate_password_hash, check_password_hash
 
 app = Flask(__name__)
+app.secret_key = "change-this-to-a-random-secret-key"
+
+login_manager = LoginManager()
+login_manager.init_app(app)
+login_manager.login_view = "login"
 
 
+class User(UserMixin):
+    def __init__(self, id, username, email, password_hash):
+        self.id = id
+        self.username = username
+        self.email = email
+        self.password_hash = password_hash
+
+
+@login_manager.user_loader
+def load_user(user_id):
+    connection = get_connection()
+    cursor = connection.cursor()
+
+    try:
+        cursor.execute("""
+            SELECT id, username, email, password_hash
+            FROM users
+            WHERE id = %s
+        """, (user_id,))
+
+        row = cursor.fetchone()
+
+        if row:
+            return User(row[0], row[1], row[2], row[3])
+
+        return None
+    finally:
+        cursor.close()
+        connection.close()
+
+
+# ---------------------------------------------------------
+# REGISTER
+# ---------------------------------------------------------
+@app.route("/register", methods=["GET", "POST"])
+def register():
+    if request.method == "POST":
+        data = request.json or {}
+
+        username = data.get("username")
+        email = data.get("email")
+        password = data.get("password")
+
+        if not username or not email or not password:
+            return jsonify({
+                "success": False,
+                "error": "Username, email and password are required."
+            }), 400
+
+        password_hash = generate_password_hash(password)
+
+        connection = get_connection()
+        cursor = connection.cursor()
+
+        try:
+            cursor.execute("""
+                INSERT INTO users (username, email, password_hash)
+                VALUES (%s, %s, %s)
+            """, (username, email, password_hash))
+
+            connection.commit()
+
+            return jsonify({
+                "success": True,
+                "message": "Account created successfully!"
+            })
+
+        except Exception as e:
+            connection.rollback()
+
+            return jsonify({
+                "success": False,
+                "error": str(e)
+            }), 400
+
+        finally:
+            cursor.close()
+            connection.close()
+
+    return render_template("register.html")
+
+
+# ---------------------------------------------------------
+# LOGIN
+# ---------------------------------------------------------
+@app.route("/login", methods=["GET", "POST"])
+def login():
+    if request.method == "POST":
+        data = request.json or {}
+
+        email = data.get("email")
+        password = data.get("password")
+
+        connection = get_connection()
+        cursor = connection.cursor()
+
+        try:
+            cursor.execute("""
+                SELECT id, username, email, password_hash
+                FROM users
+                WHERE email = %s
+            """, (email,))
+
+            row = cursor.fetchone()
+
+        finally:
+            cursor.close()
+            connection.close()
+
+        if row and check_password_hash(row[3], password):
+            user = User(
+                row[0],
+                row[1],
+                row[2],
+                row[3]
+            )
+
+            login_user(user)
+
+            return jsonify({
+                "success": True,
+                "message": "Login successful!"
+            })
+
+        return jsonify({
+            "success": False,
+            "error": "Invalid email or password."
+        }), 401
+
+    return render_template("login.html")
+
+
+# ---------------------------------------------------------
+# LOGOUT
+# ---------------------------------------------------------
+@app.route("/logout")
+@login_required
+def logout():
+    logout_user()
+
+    return jsonify({
+        "success": True,
+        "message": "Logged out successfully!"
+    })
+
+
+# ---------------------------------------------------------
+# HOME
+# ---------------------------------------------------------
 @app.route("/")
 def home():
-    return render_template("index.html")
 
+    # If user is already logged in
+    if current_user.is_authenticated:
+        return render_template("index.html")
 
+    # Check whether an account already exists
+    connection = get_connection()
+    cursor = connection.cursor()
+
+    try:
+        cursor.execute("SELECT COUNT(*) FROM users")
+        user_count = cursor.fetchone()[0]
+
+    finally:
+        cursor.close()
+        connection.close()
+
+    # First time: no account exists
+    if user_count == 0:
+        return redirect("/register")
+
+    # Account already exists
+    return redirect("/login")
+
+# ---------------------------------------------------------
 # TEST DATABASE
+# ---------------------------------------------------------
 @app.route("/test-db")
 def test_db():
-
     try:
         connection = get_connection()
         cursor = connection.cursor()
@@ -29,13 +214,14 @@ def test_db():
         return f"❌ Database Error: {e}"
 
 
-# ADD PAYMENT TO SQL
+# ---------------------------------------------------------
+# ADD PAYMENT
+# ---------------------------------------------------------
 @app.route("/add-payment", methods=["POST"])
+@login_required
 def add_payment():
-
     try:
-
-        data = request.json
+        data = request.json or {}
 
         name = data["name"]
         payment_type = data["payment_type"]
@@ -47,16 +233,16 @@ def add_payment():
 
         cursor.execute("""
             INSERT INTO Payments
-            (name, payment_type, amount, due_date, status, paid_amount)
-            VALUES (?, ?, ?, ?, ?, ?)
-        """,
-        (
+            (name, payment_type, amount, due_date, status, paid_amount, user_id)
+            VALUES (%s, %s, %s, %s, %s, %s, %s)
+        """, (
             name,
             payment_type,
             amount,
             due_date,
             "Not Paid",
-            0
+            0,
+            current_user.id
         ))
 
         connection.commit()
@@ -70,20 +256,23 @@ def add_payment():
         })
 
     except Exception as e:
-
         return jsonify({
             "success": False,
             "error": str(e)
         }), 500
 
-    # GET PAYMENTS FROM SQL
+
+# ---------------------------------------------------------
+# GET PAYMENTS
+# ---------------------------------------------------------
 @app.route("/payments")
+@login_required
 def get_payments():
     try:
         connection = get_connection()
         cursor = connection.cursor()
 
-        # Get all payments
+        # Only get payments belonging to the logged-in user.
         cursor.execute("""
             SELECT
                 id,
@@ -94,18 +283,18 @@ def get_payments():
                 status,
                 paid_amount
             FROM Payments
+            WHERE user_id = %s
             ORDER BY id
-        """)
+        """, (current_user.id,))
 
         rows = cursor.fetchall()
 
         payments = []
 
         for row in rows:
-
             payment_id = row[0]
 
-            # Get payment history for this payment
+            # Get history only for this user's payment.
             cursor.execute("""
                 SELECT
                     id,
@@ -150,13 +339,15 @@ def get_payments():
             "error": str(e)
         }), 500
 
-   # MARK PAYMENT AS FULLY PAID
-# MARK PAYMENT AS FULLY PAID
-@app.route("/mark-paid/<int:payment_id>", methods=["PUT"])
-def mark_paid(payment_id):
 
+# ---------------------------------------------------------
+# MARK PAYMENT AS FULLY PAID
+# ---------------------------------------------------------
+@app.route("/mark-paid/<int:payment_id>", methods=["PUT"])
+@login_required
+def mark_paid(payment_id):
     try:
-        data = request.json
+        data = request.json or {}
 
         method = data["method"]
         payment_date = data["date"]
@@ -164,16 +355,18 @@ def mark_paid(payment_id):
         connection = get_connection()
         cursor = connection.cursor()
 
-        # Get existing payment details
+        # Get payment only if it belongs to the logged-in user.
         cursor.execute("""
             SELECT amount, paid_amount
             FROM Payments
-            WHERE id = %s
-        """, (payment_id,))
+            WHERE id = %s AND user_id = %s
+        """, (payment_id, current_user.id))
 
         row = cursor.fetchone()
 
         if not row:
+            cursor.close()
+            connection.close()
             return jsonify({
                 "success": False,
                 "error": "Payment not found"
@@ -185,12 +378,14 @@ def mark_paid(payment_id):
         pending = amount - paid_amount
 
         if pending <= 0:
+            cursor.close()
+            connection.close()
             return jsonify({
                 "success": False,
                 "error": "Payment is already fully paid."
             }), 400
 
-        # Mark remaining amount as paid
+        # Update only the logged-in user's payment.
         cursor.execute("""
             UPDATE Payments
             SET
@@ -198,14 +393,15 @@ def mark_paid(payment_id):
                 paid_amount = amount,
                 payment_method = %s,
                 paid_date = %s
-            WHERE id = %s
+            WHERE id = %s AND user_id = %s
         """, (
             method,
             payment_date,
-            payment_id
+            payment_id,
+            current_user.id
         ))
 
-        # Add this payment to PaymentHistory
+        # Add this payment to PaymentHistory.
         cursor.execute("""
             INSERT INTO PaymentHistory
             (payment_id, amount, payment_method, payment_date)
@@ -230,18 +426,20 @@ def mark_paid(payment_id):
         })
 
     except Exception as e:
-
         return jsonify({
             "success": False,
             "error": str(e)
         }), 500
-     # RECORD PARTIAL PAYMENT
-# RECORD PARTIAL PAYMENT
-@app.route("/partial-payment/<int:payment_id>", methods=["PUT"])
-def partial_payment(payment_id):
 
+
+# ---------------------------------------------------------
+# RECORD PARTIAL PAYMENT
+# ---------------------------------------------------------
+@app.route("/partial-payment/<int:payment_id>", methods=["PUT"])
+@login_required
+def partial_payment(payment_id):
     try:
-        data = request.json
+        data = request.json or {}
 
         amount = float(data["amount"])
         method = data["method"]
@@ -250,16 +448,18 @@ def partial_payment(payment_id):
         connection = get_connection()
         cursor = connection.cursor()
 
-        # Get current payment details
+        # Get payment only if it belongs to the logged-in user.
         cursor.execute("""
             SELECT amount, paid_amount
             FROM Payments
-            WHERE id = %s
-        """, (payment_id,))
+            WHERE id = %s AND user_id = %s
+        """, (payment_id, current_user.id))
 
         row = cursor.fetchone()
 
         if not row:
+            cursor.close()
+            connection.close()
             return jsonify({
                 "success": False,
                 "error": "Payment not found"
@@ -271,12 +471,16 @@ def partial_payment(payment_id):
         pending = total_amount - current_paid
 
         if amount <= 0:
+            cursor.close()
+            connection.close()
             return jsonify({
                 "success": False,
                 "error": "Invalid payment amount."
             }), 400
 
         if amount > pending:
+            cursor.close()
+            connection.close()
             return jsonify({
                 "success": False,
                 "error": "Amount cannot be greater than pending amount."
@@ -289,20 +493,21 @@ def partial_payment(payment_id):
         else:
             status = "Partially Paid"
 
-        # Update main payment
+        # Update only this user's payment.
         cursor.execute("""
             UPDATE Payments
             SET
                 paid_amount = %s,
                 status = %s
-            WHERE id = %s
+            WHERE id = %s AND user_id = %s
         """, (
             new_paid,
             status,
-            payment_id
+            payment_id,
+            current_user.id
         ))
 
-        # Save individual payment
+        # Save individual payment.
         cursor.execute("""
             INSERT INTO PaymentHistory
             (payment_id, amount, payment_method, payment_date)
@@ -326,79 +531,20 @@ def partial_payment(payment_id):
         })
 
     except Exception as e:
-
         return jsonify({
             "success": False,
             "error": str(e)
         }), 500
 
-        # Get current paid amount and total amount
-        cursor.execute("""
-            SELECT amount, paid_amount
-            FROM Payments
-            WHERE id = ?
-        """, (payment_id,))
 
-        row = cursor.fetchone()
-
-        if not row:
-            return jsonify({
-                "success": False,
-                "error": "Payment not found"
-            }), 404
-
-        total_amount = float(row[0])
-        current_paid = float(row[1] or 0)
-
-        new_paid = current_paid + amount
-
-        if new_paid > total_amount:
-            return jsonify({
-                "success": False,
-                "error": "Payment amount cannot exceed the rent amount."
-            }), 400
-
-        if new_paid >= total_amount:
-            status = "Paid"
-        else:
-            status = "Partially Paid"
-
-        cursor.execute("""
-            UPDATE Payments
-            SET
-                paid_amount = ?,
-                status = ?
-            WHERE id = ?
-        """, (
-            new_paid,
-            status,
-            payment_id
-        ))
-
-        connection.commit()
-
-        cursor.close()
-        connection.close()
-
-        return jsonify({
-            "success": True,
-            "paid_amount": new_paid,
-            "status": status
-        })
-
-    except Exception as e:
-
-        return jsonify({
-            "success": False,
-            "error": str(e)
-        }), 500
-
-    # EDIT PAYMENT
+# ---------------------------------------------------------
+# EDIT PAYMENT
+# ---------------------------------------------------------
 @app.route("/edit-payment/<int:payment_id>", methods=["PUT"])
+@login_required
 def edit_payment(payment_id):
-
     try:
-        data = request.json
+        data = request.json or {}
 
         name = data["name"]
         payment_type = data["payment_type"]
@@ -415,14 +561,25 @@ def edit_payment(payment_id):
                 payment_type = %s,
                 amount = %s,
                 due_date = %s
-            WHERE id = %s
+            WHERE id = %s AND user_id = %s
         """, (
             name,
             payment_type,
             amount,
             due_date,
-            payment_id
+            payment_id,
+            current_user.id
         ))
+
+        if cursor.rowcount == 0:
+            connection.rollback()
+            cursor.close()
+            connection.close()
+
+            return jsonify({
+                "success": False,
+                "error": "Payment not found"
+            }), 404
 
         connection.commit()
 
@@ -435,18 +592,20 @@ def edit_payment(payment_id):
         })
 
     except Exception as e:
-
         return jsonify({
             "success": False,
             "error": str(e)
         }), 500
 
-    # EDIT PAYMENT HISTORY
-@app.route("/edit-payment-history/<int:history_id>", methods=["PUT"])
-def edit_payment_history(history_id):
 
+# ---------------------------------------------------------
+# EDIT PAYMENT HISTORY
+# ---------------------------------------------------------
+@app.route("/edit-payment-history/<int:history_id>", methods=["PUT"])
+@login_required
+def edit_payment_history(history_id):
     try:
-        data = request.json
+        data = request.json or {}
 
         new_amount = float(data["amount"])
         new_method = data["method"]
@@ -461,16 +620,21 @@ def edit_payment_history(history_id):
         connection = get_connection()
         cursor = connection.cursor()
 
-        # Get the existing payment history record
+        # Find the payment connected to this history record,
+        # but only if the payment belongs to the logged-in user.
         cursor.execute("""
-            SELECT payment_id
-            FROM PaymentHistory
-            WHERE id = %s
-        """, (history_id,))
+            SELECT ph.payment_id
+            FROM PaymentHistory ph
+            INNER JOIN Payments p ON p.id = ph.payment_id
+            WHERE ph.id = %s AND p.user_id = %s
+        """, (history_id, current_user.id))
 
         row = cursor.fetchone()
 
         if not row:
+            cursor.close()
+            connection.close()
+
             return jsonify({
                 "success": False,
                 "error": "Payment history not found."
@@ -478,7 +642,7 @@ def edit_payment_history(history_id):
 
         payment_id = row[0]
 
-        # Update the individual payment
+        # Update the individual payment history record.
         cursor.execute("""
             UPDATE PaymentHistory
             SET
@@ -493,7 +657,7 @@ def edit_payment_history(history_id):
             history_id
         ))
 
-        # Calculate total paid again
+        # Calculate total paid again.
         cursor.execute("""
             SELECT COALESCE(SUM(amount), 0)
             FROM PaymentHistory
@@ -502,16 +666,20 @@ def edit_payment_history(history_id):
 
         total_paid = float(cursor.fetchone()[0])
 
-        # Get total payment amount
+        # Get total payment amount, only for the logged-in user.
         cursor.execute("""
             SELECT amount
             FROM Payments
-            WHERE id = %s
-        """, (payment_id,))
+            WHERE id = %s AND user_id = %s
+        """, (payment_id, current_user.id))
 
         payment_row = cursor.fetchone()
 
         if not payment_row:
+            connection.rollback()
+            cursor.close()
+            connection.close()
+
             return jsonify({
                 "success": False,
                 "error": "Main payment not found."
@@ -519,17 +687,18 @@ def edit_payment_history(history_id):
 
         total_amount = float(payment_row[0])
 
-        # Don't allow history payments to exceed total amount
+        # Don't allow history payments to exceed total amount.
         if total_paid > total_amount:
-
             connection.rollback()
+            cursor.close()
+            connection.close()
 
             return jsonify({
                 "success": False,
                 "error": "Total payments cannot exceed the rent amount."
             }), 400
 
-        # Determine status
+        # Determine status.
         if total_paid >= total_amount:
             status = "Paid"
         elif total_paid > 0:
@@ -537,17 +706,18 @@ def edit_payment_history(history_id):
         else:
             status = "Not Paid"
 
-        # Update main Payments table
+        # Update main Payments table only for this user.
         cursor.execute("""
             UPDATE Payments
             SET
                 paid_amount = %s,
                 status = %s
-            WHERE id = %s
+            WHERE id = %s AND user_id = %s
         """, (
             total_paid,
             status,
-            payment_id
+            payment_id,
+            current_user.id
         ))
 
         connection.commit()
@@ -562,11 +732,14 @@ def edit_payment_history(history_id):
         })
 
     except Exception as e:
-
         return jsonify({
             "success": False,
             "error": str(e)
         }), 500
-    
+
+
+# ---------------------------------------------------------
+# RUN APP
+# ---------------------------------------------------------
 if __name__ == "__main__":
     app.run(debug=True)

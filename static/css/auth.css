@@ -1,0 +1,179 @@
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+    font-family: Arial, sans-serif;
+}
+
+body {
+    min-height: 100vh;
+    background: linear-gradient(135deg, #667eea, #764ba2);
+
+    display: flex;
+    justify-content: center;
+    align-items: center;
+
+    padding: 20px;
+}
+
+.auth-container {
+    width: 500px;
+
+    padding: 42px 50px;
+
+    background: rgba(255, 255, 255, 0.96);
+
+    border-radius: 24px;
+
+    box-shadow: 0 20px 50px rgba(0, 0, 0, 0.25);
+
+    text-align: center;
+}
+
+.logo {
+    font-size: 40px;
+    font-weight: bold;
+
+    color: #667eea;
+
+    margin-bottom: 8px;
+}
+
+.subtitle {
+    color: #666;
+
+    font-size: 17px;
+
+    margin-bottom: 30px;
+}
+
+.auth-container h2 {
+    color: #222;
+
+    font-size: 30px;
+
+    margin-bottom: 28px;
+}
+
+.input-group {
+    text-align: left;
+
+    margin-bottom: 20px;
+}
+
+.input-group label {
+    display: block;
+
+    color: #333;
+
+    font-size: 15px;
+
+    font-weight: bold;
+
+    margin-bottom: 8px;
+}
+
+.input-group input {
+    width: 100%;
+
+    padding: 15px 16px;
+
+    border: 1px solid #d8d8d8;
+
+    border-radius: 11px;
+
+    font-size: 16px;
+
+    outline: none;
+
+    background: white;
+
+    transition: 0.3s;
+}
+
+.input-group input:focus {
+    border-color: #667eea;
+
+    box-shadow:
+        0 0 0 3px rgba(102, 126, 234, 0.15);
+}
+
+.auth-button {
+    width: 100%;
+
+    padding: 15px;
+
+    margin-top: 5px;
+
+    border: none;
+
+    border-radius: 11px;
+
+    background: linear-gradient(
+        135deg,
+        #667eea,
+        #764ba2
+    );
+
+    color: white;
+
+    font-size: 17px;
+
+    font-weight: bold;
+
+    cursor: pointer;
+
+    transition: 0.3s;
+}
+
+.auth-button:hover {
+    transform: translateY(-2px);
+
+    box-shadow:
+        0 8px 20px rgba(102, 126, 234, 0.35);
+}
+
+#message {
+    margin-top: 15px;
+
+    color: #e74c3c;
+
+    font-size: 14px;
+}
+
+.auth-link {
+    margin-top: 25px;
+
+    color: #777;
+
+    font-size: 15px;
+}
+
+.auth-link a {
+    color: #667eea;
+
+    font-weight: bold;
+
+    text-decoration: none;
+}
+
+.auth-link a:hover {
+    text-decoration: underline;
+}
+
+@media (max-width: 600px) {
+
+    .auth-container {
+        width: 90%;
+
+        padding: 35px 25px;
+    }
+
+    .logo {
+        font-size: 34px;
+    }
+
+    .auth-container h2 {
+        font-size: 26px;
+    }
+}

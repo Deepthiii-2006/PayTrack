@@ -8,6 +8,7 @@
 
     <title>PayTrack - Rent & Payment Tracker</title>
     
+    
 </head>
 
 <body>
@@ -20,6 +21,7 @@
             <button onclick="showPage('rent')">🏡 Rent</button>
             <button onclick="showPage('payments')">💳 Payments</button>
             <button onclick="showPage('reminders')">🔔 Reminders</button>
+            <button onclick="logoutUser()" class="logout-btn">Logout</button>
         </nav>
     </aside>
 
@@ -337,6 +339,17 @@
 
 
     <script src="{{ url_for('static', filename='js/script.js') }}"></script>
+    <script>
+     async function logoutUser() {
+    const response = await fetch("/logout");
+
+    const result = await response.json();
+
+    if (result.success) {
+        window.location.href = "/login";
+    }
+}
+</script>
 
 </body>
 </html>
